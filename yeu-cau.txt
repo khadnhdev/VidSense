@@ -1,6 +1,0 @@
-tôi muốn làm ứng dụng sau đây:
-Mục tiêu mô tả nội dung video.
-đầu tiên là tải video lên.
-dùng whisper làm transcribe (có mốc thời gian)
-sau đó cắt video thành từng frame, 10s 1 lần, sau đó dùng API open API để mô tả từng frame ảnh.
-sau đó kết hợp cả 2 thông tin, viết lại mô tả của video dưới dạng góc nhìn người kể chuyện theo thời gian (dùng gemini API)
