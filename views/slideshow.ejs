@@ -209,7 +209,7 @@
   </div>
   
   <div class="container">
-    <h1>Trình chiếu: <%= video.title %></h1>
+    <h1><%= video.title %></h1
     
     <div class="slideshow-container">
       <% 
@@ -287,6 +287,11 @@
       const btnRestart = document.getElementById('btn-restart');
       const btnSpeed = document.getElementById('btn-speed');
       const btnVoice = document.getElementById('btn-voice');
+      
+      // Khởi tạo nhạc nền
+      const backgroundMusic = new Audio('/background/background.mp3');
+      backgroundMusic.loop = true; // Lặp lại liên tục
+      backgroundMusic.volume = 0.2; // Âm lượng nhỏ (20%)
       
       // Lấy thời gian của slide cuối cùng
       const lastSlideTime = slides.length > 0 ? 
@@ -555,6 +560,11 @@
         isPlaying = false;
         btnToggle.textContent = "Tiếp tục";
         btnToggle.classList.remove('btn-pause');
+        
+        // Chỉ tạm dừng nhạc nền khi dừng slideshow, không dừng hẳn
+        if (!backgroundMusic.paused) {
+          backgroundMusic.pause();
+        }
       }
       
       function toggleSlideshow() {
@@ -564,6 +574,12 @@
           isPlaying = true;
           btnToggle.textContent = "Tạm dừng";
           btnToggle.classList.add('btn-pause');
+          
+          // Tiếp tục phát nhạc nền nếu đã tạm dừng
+          if (backgroundMusic.paused && userInteracted) {
+            backgroundMusic.play().catch(err => console.error('Không thể tiếp tục nhạc nền:', err));
+          }
+          
           startSlideshow();
         }
         // Phương pháp dự phòng - click vào nút để test chuyển slide một cách thủ công
@@ -635,6 +651,14 @@
         
         // Đánh dấu người dùng đã tương tác
         userInteracted = true;
+        
+        // Phát nhạc nền
+        try {
+          backgroundMusic.play()
+            .catch(err => console.error('Không thể phát nhạc nền:', err));
+        } catch (err) {
+          console.error('Lỗi khi phát nhạc nền:', err);
+        }
         
         // Kiểm tra xem có audio nào được tải thành công không
         const anyAudioLoaded = Object.values(audioElements).some(audio => !audio.error);
