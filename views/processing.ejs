@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đang xử lý video - <%= video.title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Đang xử lý video</h1>
+    <h2><%= video.title %></h2>
+    
+    <div class="progress-container">
+      <div class="progress-step <%= video.status === 'transcribing' || video.status === 'extracting_frames' || video.status === 'describing_frames' || video.status === 'generating_narrative' || video.status === 'completed' ? 'active' : '' %>">
+        <div class="step-number">1</div>
+        <div class="step-label">Trích xuất lời nói</div>
+      </div>
+      
+      <div class="progress-step <%= video.status === 'extracting_frames' || video.status === 'describing_frames' || video.status === 'generating_narrative' || video.status === 'completed' ? 'active' : '' %>">
+        <div class="step-number">2</div>
+        <div class="step-label">Trích xuất khung hình</div>
+      </div>
+      
+      <div class="progress-step <%= video.status === 'describing_frames' || video.status === 'generating_narrative' || video.status === 'completed' ? 'active' : '' %>">
+        <div class="step-number">3</div>
+        <div class="step-label">Mô tả khung hình</div>
+      </div>
+      
+      <div class="progress-step <%= video.status === 'generating_narrative' || video.status === 'completed' ? 'active' : '' %>">
+        <div class="step-number">4</div>
+        <div class="step-label">Tạo bản tường thuật</div>
+      </div>
+      
+      <div class="progress-step <%= video.status === 'completed' ? 'active' : '' %>">
+        <div class="step-number">5</div>
+        <div class="step-label">Hoàn tất</div>
+      </div>
+    </div>
+    
+    <div class="status-message" id="status-message">
+      <p>Trạng thái: <span id="current-status"><%= getStatusText(video.status) %></span></p>
+    </div>
+    
+    <div class="loading-spinner" id="loading-spinner">
+      <div class="spinner"></div>
+    </div>
+    
+    <a href="/" class="btn btn-secondary">Quay lại trang chủ</a>
+  </div>
+  
+  <script>
+    const videoId = '<%= video.id %>';
+    
+    function checkStatus() {
+      fetch(`/status/${videoId}`)
+        .then(response => response.json())
+        .then(data => {
+          const statusText = getStatusText(data.status);
+          document.getElementById('current-status').textContent = statusText;
+          
+          // Cập nhật các step
+          document.querySelectorAll('.progress-step').forEach(step => {
+            step.classList.remove('active');
+          });
+          
+          if (data.status === 'transcribing' || data.status === 'extracting_frames' || 
+              data.status === 'describing_frames' || data.status === 'generating_narrative' || 
+              data.status === 'completed') {
+            document.querySelectorAll('.progress-step')[0].classList.add('active');
+          }
+          
+          if (data.status === 'extracting_frames' || data.status === 'describing_frames' || 
+              data.status === 'generating_narrative' || data.status === 'completed') {
+            document.querySelectorAll('.progress-step')[1].classList.add('active');
+          }
+          
+          if (data.status === 'describing_frames' || data.status === 'generating_narrative' || 
+              data.status === 'completed') {
+            document.querySelectorAll('.progress-step')[2].classList.add('active');
+          }
+          
+          if (data.status === 'generating_narrative' || data.status === 'completed') {
+            document.querySelectorAll('.progress-step')[3].classList.add('active');
+          }
+          
+          if (data.status === 'completed') {
+            document.querySelectorAll('.progress-step')[4].classList.add('active');
+            document.getElementById('loading-spinner').style.display = 'none';
+            window.location.href = `/result/${videoId}`;
+          } else if (data.status === 'error') {
+            document.getElementById('loading-spinner').style.display = 'none';
+            document.getElementById('status-message').innerHTML = '<p class="error">Đã xảy ra lỗi khi xử lý video.</p>';
+          } else {
+            setTimeout(checkStatus, 5000);
+          }
+        })
+        .catch(error => {
+          console.error('Lỗi khi kiểm tra trạng thái:', error);
+          setTimeout(checkStatus, 10000);
+        });
+    }
+    
+    function getStatusText(status) {
+      switch(status) {
+        case 'processing': return 'Đang chuẩn bị';
+        case 'transcribing': return 'Đang trích xuất lời nói';
+        case 'extracting_frames': return 'Đang trích xuất khung hình';
+        case 'describing_frames': return 'Đang mô tả khung hình';
+        case 'generating_narrative': return 'Đang tạo bản tường thuật';
+        case 'completed': return 'Đã hoàn tất';
+        case 'error': return 'Lỗi';
+        default: return status;
+      }
+    }
+    
+    // Bắt đầu kiểm tra trạng thái
+    checkStatus();
+  </script>
+</body>
+</html> 

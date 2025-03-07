@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kết quả mô tả video - <%= video.title %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container result-container">
+    <h1>Kết quả mô tả video</h1>
+    <h2><%= video.title %></h2>
+    
+    <div class="result-section">
+      <h3>Bản tường thuật</h3>
+      <div class="narrative">
+        <%- video.narrative.replace(/\n/g, '<br>') %>
+      </div>
+    </div>
+    
+    <div class="result-section">
+      <h3>Thông tin chi tiết</h3>
+      
+      <div class="tabs">
+        <button class="tab-button active" onclick="openTab(event, 'transcript')">Bản ghi âm</button>
+        <button class="tab-button" onclick="openTab(event, 'frame-descriptions')">Mô tả hình ảnh</button>
+      </div>
+      
+      <div id="transcript" class="tab-content" style="display: block;">
+        <% 
+          let transcript;
+          try {
+            transcript = JSON.parse(video.transcript);
+          } catch(e) {
+            transcript = { segments: [] };
+          }
+        %>
+        
+        <% if (transcript && transcript.segments && transcript.segments.length > 0) { %>
+          <div class="transcript-container">
+            <% transcript.segments.forEach(segment => { %>
+              <div class="transcript-segment">
+                <div class="transcript-time">
+                  <%= formatTime(segment.start) %> - <%= formatTime(segment.end) %>
+                </div>
+                <div class="transcript-text">
+                  <%= segment.text %>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        <% } else { %>
+          <p>Không có bản ghi âm hoặc video không có lời nói.</p>
+        <% } %>
+      </div>
+      
+      <div id="frame-descriptions" class="tab-content">
+        <% 
+          let descriptions;
+          try {
+            descriptions = JSON.parse(video.frame_descriptions);
+          } catch(e) {
+            descriptions = [];
+          }
+        %>
+        
+        <% if (descriptions && descriptions.length > 0) { %>
+          <div class="frames-container">
+            <% descriptions.forEach(frame => { %>
+              <div class="frame-description">
+                <div class="frame-time">
+                  Thời điểm: <%= formatTime(frame.time) %>
+                </div>
+                <div class="frame-text">
+                  <%= frame.description %>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        <% } else { %>
+          <p>Không có mô tả hình ảnh.</p>
+        <% } %>
+      </div>
+    </div>
+    
+    <div class="buttons">
+      <a href="/" class="btn btn-primary">Xử lý video khác</a>
+    </div>
+  </div>
+  
+  <script>
+    function openTab(evt, tabName) {
+      const tabContents = document.getElementsByClassName("tab-content");
+      for (let i = 0; i < tabContents.length; i++) {
+        tabContents[i].style.display = "none";
+      }
+      
+      const tabButtons = document.getElementsByClassName("tab-button");
+      for (let i = 0; i < tabButtons.length; i++) {
+        tabButtons[i].className = tabButtons[i].className.replace(" active", "");
+      }
+      
+      document.getElementById(tabName).style.display = "block";
+      evt.currentTarget.className += " active";
+    }
+  </script>
+</body>
+</html> 

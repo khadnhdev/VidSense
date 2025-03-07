@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ứng dụng mô tả video</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Ứng dụng mô tả video thông minh</h1>
+    <p>Tải lên video để tạo mô tả chi tiết dựa trên bản ghi âm và phân tích hình ảnh</p>
+    
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="title">Tiêu đề video (tùy chọn):</label>
+        <input type="text" id="title" name="title" placeholder="Nhập tiêu đề video">
+      </div>
+      
+      <div class="form-group">
+        <label for="video">Chọn video (tối đa 100MB):</label>
+        <input type="file" id="video" name="video" accept="video/*" required>
+      </div>
+      
+      <button type="submit" class="btn">Tải lên và xử lý</button>
+    </form>
+  </div>
+</body>
+</html> 
