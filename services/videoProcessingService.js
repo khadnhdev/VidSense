@@ -39,14 +39,14 @@ async function processVideo(videoId, videoPath) {
     
     const duration = await getVideoDuration(videoPath);
     console.log(`[Video ${videoId}] Thời lượng video: ${duration}s`);
-    await extractFrames(videoPath, framesDir, duration);
+    const frameFiles = await extractFrames(videoPath, framesDir, duration);
     
     // Cập nhật trạng thái
     await videoModel.updateVideoStatus(videoId, 'describing_frames');
     console.log(`\n[Video ${videoId}] Bước 3: Đang mô tả các khung hình...`);
     
     // Bước 3: Mô tả các khung hình
-    const frameDescriptions = await describeFrames(framesDir);
+    const frameDescriptions = await describeFrames(framesDir, frameFiles);
     await videoModel.updateVideoFrameDescriptions(videoId, frameDescriptions);
     console.log(`[Video ${videoId}] ✓ Đã mô tả ${frameDescriptions.length} khung hình`);
     
@@ -73,6 +73,7 @@ async function getVideoDuration(videoPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(videoPath, (err, metadata) => {
       if (err) return reject(err);
+      console.log('[Duration] Metadata:', metadata.format);
       resolve(metadata.format.duration);
     });
   });
@@ -83,32 +84,93 @@ async function extractFrames(videoPath, outputDir, duration) {
   const frameCount = Math.floor(duration / frameInterval);
   
   console.log(`[Frames] Bắt đầu trích xuất ${frameCount + 1} khung hình...`);
+  console.log(`[Frames] Duration: ${duration}s, Interval: ${frameInterval}s`);
+  console.log(`[Frames] Output directory: ${outputDir}`);
   
-  for (let i = 0; i <= frameCount; i++) {
-    const timeInSeconds = i * frameInterval;
-    console.log(`[Frames] Đang trích xuất khung hình tại ${timeInSeconds}s...`);
-    
+  // Sử dụng phương pháp thumbnail (phương pháp 4) làm phương pháp chính
+  try {
+    console.log('[Frames] Trích xuất frames bằng thumbnail method...');
     await new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .screenshots({
-          timestamps: [timeInSeconds],
-          filename: `frame_${timeInSeconds}.jpg`,
+          count: frameCount + 1,
           folder: outputDir,
+          filename: 'thumbnail-%i.jpg',
           size: process.env.FRAME_SIZE
         })
         .on('end', resolve)
         .on('error', reject);
     });
+    
+    // Đổi tên từ thumbnail-X thành frame_Y
+    const files = await fs.readdir(outputDir);
+    const thumbnailFiles = files.filter(file => file.startsWith('thumbnail-') && file.endsWith('.jpg'));
+    console.log('[Frames] Files được tạo:', thumbnailFiles.length);
+    console.log('[Frames] Danh sách files:', thumbnailFiles);
+    
+    // Đổi tên các files
+    const frameFiles = [];
+    for (const file of thumbnailFiles) {
+      const match = file.match(/thumbnail-(\d+)\.jpg/);
+      if (match) {
+        const index = parseInt(match[1]) - 1;
+        const timeInSeconds = index * frameInterval;
+        const newName = `frame_${timeInSeconds}.jpg`;
+        await fs.rename(
+          path.join(outputDir, file),
+          path.join(outputDir, newName)
+        );
+        frameFiles.push(newName);
+      }
+    }
+    
+    // Kiểm tra lại sau khi đổi tên
+    const renamedFiles = await fs.readdir(outputDir);
+    console.log('[Frames] Files sau khi đổi tên:', renamedFiles);
+    console.log(`[Frames] ✓ Đã trích xuất xong ${frameFiles.length}/${frameCount + 1} khung hình`);
+    
+    if (frameFiles.length === 0) {
+      throw new Error('Không thể trích xuất bất kỳ khung hình nào');
+    }
+    
+    return frameFiles;
+  } catch (error) {
+    console.error('[Frames] Lỗi khi trích xuất khung hình:', error);
+    
+    // Phương pháp dự phòng nếu thumbnails không hoạt động
+    try {
+      console.log('[Frames] Đang thử trích xuất từng khung hình riêng biệt...');
+      const extractedFrames = [];
+      
+      for (let i = 0; i <= frameCount; i++) {
+        const timeInSeconds = i * frameInterval;
+        console.log(`[Frames] Đang trích xuất khung hình tại ${timeInSeconds}s...`);
+        
+        await new Promise((resolve, reject) => {
+          ffmpeg(videoPath)
+            .seekInput(timeInSeconds)
+            .outputOptions(['-vframes 1', '-q:v 1'])
+            .output(path.join(outputDir, `frame_${timeInSeconds}.jpg`))
+            .on('end', resolve)
+            .on('error', reject)
+            .run();
+        });
+        
+        extractedFrames.push(`frame_${timeInSeconds}.jpg`);
+      }
+      
+      console.log(`[Frames] ✓ Đã trích xuất xong ${extractedFrames.length} khung hình`);
+      return extractedFrames;
+    } catch (finalError) {
+      console.error('[Frames] Tất cả các phương pháp đều thất bại:', finalError);
+      return [];
+    }
   }
-  
-  console.log(`[Frames] ✓ Đã trích xuất xong ${frameCount + 1} khung hình`);
 }
 
-async function describeFrames(framesDir) {
-  const files = await fs.readdir(framesDir);
-  const frameFiles = files.filter(file => file.startsWith('frame_') && file.endsWith('.jpg'));
-  
+async function describeFrames(framesDir, frameFiles) {
   console.log(`[Descriptions] Bắt đầu mô tả ${frameFiles.length} khung hình...`);
+  console.log(`[Descriptions] Danh sách file:`, frameFiles);
   
   const descriptions = [];
   
@@ -118,12 +180,15 @@ async function describeFrames(framesDir) {
     const timeInSeconds = timeMatch ? parseInt(timeMatch[1]) : 0;
     
     console.log(`[Descriptions] Đang mô tả khung hình tại ${timeInSeconds}s...`);
-    const description = await openaiService.describeImage(filePath);
-    
-    descriptions.push({
-      time: timeInSeconds,
-      description
-    });
+    try {
+      const description = await openaiService.describeImage(filePath);
+      descriptions.push({
+        time: timeInSeconds,
+        description
+      });
+    } catch (error) {
+      console.error(`[Descriptions] Lỗi khi mô tả khung hình ${file}:`, error);
+    }
   }
   
   // Sắp xếp theo thời gian
@@ -148,4 +213,4 @@ async function cleanup(framesDir) {
 
 module.exports = {
   processVideo
-}; 
+};
