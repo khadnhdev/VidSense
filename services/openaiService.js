@@ -1,4 +1,4 @@
-const OpenAI = require('openai');
+const { OpenAI } = require('openai');
 const fs = require('fs');
 
 const openai = new OpenAI({
@@ -60,6 +60,30 @@ async function describeImage(imagePath, context = {}) {
   }
 }
 
+// Hàm chuyển đổi văn bản thành giọng nói
+async function textToSpeech(text, voice = 'nova') {
+  try {
+    console.log('[OpenAI TTS] Đang chuyển đổi văn bản thành giọng nói...');
+    console.log(`[OpenAI TTS] Giọng đọc: ${voice}, Độ dài văn bản: ${text.length} ký tự`);
+    
+    const mp3 = await openai.audio.speech.create({
+      model: 'tts-1',
+      voice: voice,  // 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'
+      input: text,
+    });
+    
+    // Chuyển đổi ReadableStream thành Buffer
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    console.log('[OpenAI TTS] ✓ Đã chuyển đổi thành công');
+    
+    return buffer;
+  } catch (error) {
+    console.error('[OpenAI TTS] ❌ Lỗi khi chuyển đổi văn bản thành giọng nói:', error);
+    throw error;
+  }
+}
+
 module.exports = {
-  describeImage
+  describeImage,
+  textToSpeech
 }; 

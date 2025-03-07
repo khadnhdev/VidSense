@@ -109,7 +109,7 @@
     }
     
     .btn:hover {
-      background-color: #45a049;
+      background-color: #0056b3;
     }
     
     .btn-pause {
@@ -134,6 +134,31 @@
     
     .back-link:hover {
       text-decoration: underline;
+    }
+    
+    #btn-voice {
+      position: relative;
+      font-size: 1.2rem;
+      min-width: 40px;
+    }
+    
+    #btn-voice:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    #btn-select-voice {
+      font-size: 1.2rem;
+    }
+    
+    #voice-selector-container {
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.7);
+      min-width: 250px;
+    }
+    
+    .narrative-container {
+      width: 100%;
+      height: 200px;
     }
   </style>
 </head>
@@ -182,6 +207,7 @@
         <button class="btn" id="btn-toggle">Tạm dừng</button>
         <button class="btn" id="btn-speed">x1</button>
         <button class="btn" id="btn-next">Next →</button>
+        <button class="btn" id="btn-voice" title="Bật/tắt giọng đọc">🔊</button>
       </div>
     </div>
     
@@ -214,6 +240,7 @@
       const btnToggle = document.getElementById('btn-toggle');
       const btnRestart = document.getElementById('btn-restart');
       const btnSpeed = document.getElementById('btn-speed');
+      const btnVoice = document.getElementById('btn-voice');
       
       // Debug: Kiểm tra các phần tử
       console.log('Debug slideshow:');
@@ -226,6 +253,216 @@
       let isPlaying = true;
       let speedMultiplier = 1;
       let slideInterval;
+      
+      // Thiết lập Text-to-Speech
+      let isSpeaking = true;
+      let currentAudio = null;
+      let isAudioLoading = false;
+      
+      // Kiểm tra xem trình duyệt có hỗ trợ Text-to-Speech không
+      if (!window.Audio) {
+        console.error('Trình duyệt không hỗ trợ audio');
+        btnVoice.disabled = true;
+        btnVoice.textContent = '🔇';
+        btnVoice.title = 'Trình duyệt không hỗ trợ đọc văn bản';
+      }
+      
+      // Sử dụng OpenAI TTS API
+      async function playTTS(text) {
+        if (!text || !isSpeaking) return;
+        
+        // Dừng audio đang phát
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        
+        try {
+          isAudioLoading = true;
+          updateLoadingState(true);
+          
+          // Làm sạch văn bản
+          const cleanText = text.replace(/<br\s*\/?>/gi, ' ').replace(/<\/?[^>]+(>|$)/g, '');
+          
+          // Lấy giọng đọc đã chọn
+          let selectedVoice = localStorage.getItem('selectedVoice') || 'nova';
+          
+          // Đảm bảo giọng đọc là giá trị hợp lệ
+          const validVoices = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral'];
+          if (!validVoices.includes(selectedVoice)) {
+            console.warn('Giọng đọc không hợp lệ:', selectedVoice, '- Sử dụng giọng mặc định "nova"');
+            selectedVoice = 'nova';
+          }
+          
+          console.log('Đang tạo giọng đọc cho:', cleanText.substring(0, 50) + '...', 'với giọng:', selectedVoice);
+          
+          // Gọi API để chuyển đổi text to speech
+          const response = await fetch('/api/tts', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: cleanText,
+              voice: selectedVoice
+            }),
+          });
+          
+          if (!response.ok) {
+            throw new Error('Không thể tạo giọng đọc');
+          }
+          
+          // Đọc response dưới dạng blob
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          // Tạo và phát audio
+          currentAudio = new Audio(audioUrl);
+          currentAudio.playbackRate = speedMultiplier;
+          
+          // Xử lý khi audio kết thúc
+          currentAudio.onended = function() {
+            URL.revokeObjectURL(audioUrl); // Giải phóng bộ nhớ
+          };
+          
+          // Phát audio
+          await currentAudio.play();
+          console.log('Đang phát audio...');
+        } catch (error) {
+          console.error('Lỗi khi tạo hoặc phát giọng đọc:', error);
+        } finally {
+          isAudioLoading = false;
+          updateLoadingState(false);
+        }
+      }
+      
+      // Hàm cập nhật trạng thái loading
+      function updateLoadingState(isLoading) {
+        if (isLoading) {
+          btnVoice.textContent = '⏳';
+          btnVoice.title = 'Đang tải giọng đọc...';
+        } else {
+          btnVoice.textContent = isSpeaking ? '🔊' : '🔇';
+          btnVoice.title = isSpeaking ? 'Tắt giọng đọc' : 'Bật giọng đọc';
+        }
+      }
+      
+      // Tạo menu chọn giọng OpenAI
+      function createVoiceSelector() {
+        // Nếu đã có selector, xóa đi để tạo lại
+        const existingSelector = document.getElementById('voice-selector');
+        if (existingSelector) {
+          existingSelector.remove();
+        }
+        
+        // Tạo container cho selector
+        const selectorContainer = document.createElement('div');
+        selectorContainer.id = 'voice-selector-container';
+        selectorContainer.style.position = 'absolute';
+        selectorContainer.style.backgroundColor = '#222';
+        selectorContainer.style.border = '1px solid #444';
+        selectorContainer.style.borderRadius = '5px';
+        selectorContainer.style.padding = '10px';
+        selectorContainer.style.zIndex = '1000';
+        selectorContainer.style.display = 'none';
+        selectorContainer.style.maxHeight = '300px';
+        selectorContainer.style.overflowY = 'auto';
+        selectorContainer.style.right = '10px';
+        selectorContainer.style.top = '50px';
+        
+        // Thêm tiêu đề
+        const title = document.createElement('h3');
+        title.textContent = 'Chọn giọng đọc OpenAI';
+        title.style.margin = '0 0 10px 0';
+        title.style.fontSize = '16px';
+        selectorContainer.appendChild(title);
+        
+        // Tạo select
+        const selector = document.createElement('select');
+        selector.id = 'voice-selector';
+        selector.style.width = '100%';
+        selector.style.padding = '5px';
+        selector.style.backgroundColor = '#333';
+        selector.style.color = '#fff';
+        selector.style.border = '1px solid #555';
+        
+        // Thêm các giọng OpenAI
+        const openaiVoices = [
+          { id: 'alloy', name: 'Alloy (Trung tính)' },
+          { id: 'echo', name: 'Echo (Nam trầm)' },
+          { id: 'fable', name: 'Fable (Ấm áp)' },
+          { id: 'onyx', name: 'Onyx (Nam uy lực)' },
+          { id: 'nova', name: 'Nova (Nữ ấm áp)' },
+          { id: 'shimmer', name: 'Shimmer (Nữ trong trẻo)' },
+          { id: 'ash', name: 'Ash (Mới)' },
+          { id: 'sage', name: 'Sage (Mới)' },
+          { id: 'coral', name: 'Coral (Mới)' }
+        ];
+        
+        openaiVoices.forEach(voice => {
+          const option = document.createElement('option');
+          option.value = voice.id;
+          option.textContent = voice.name;
+          selector.appendChild(option);
+        });
+        
+        selector.addEventListener('change', function() {
+          const selectedIndex = this.value;
+          if (selectedIndex !== '') {
+            // Dừng audio đang phát
+            if (currentAudio) {
+              currentAudio.pause();
+              currentAudio = null;
+            }
+            
+            // Lưu giọng đã chọn vào localStorage
+            localStorage.setItem('selectedVoice', selectedIndex);
+            
+            // Phát thử giọng
+            playTTS('Xin chào, đây là giọng đọc của OpenAI.');
+          }
+        });
+        
+        selectorContainer.appendChild(selector);
+        
+        // Nút đóng
+        const closeButton = document.createElement('button');
+        closeButton.textContent = 'Đóng';
+        closeButton.style.marginTop = '10px';
+        closeButton.style.padding = '5px 10px';
+        closeButton.style.backgroundColor = '#555';
+        closeButton.style.color = '#fff';
+        closeButton.style.border = 'none';
+        closeButton.style.borderRadius = '3px';
+        closeButton.style.cursor = 'pointer';
+        closeButton.addEventListener('click', function() {
+          selectorContainer.style.display = 'none';
+        });
+        selectorContainer.appendChild(closeButton);
+        
+        // Thêm vào trang
+        document.querySelector('.controls').appendChild(selectorContainer);
+        
+        // Đặt giọng đã lưu (nếu có)
+        const savedVoice = localStorage.getItem('selectedVoice');
+        if (savedVoice && savedVoice < openaiVoices.length) {
+          selector.value = savedVoice;
+        }
+      }
+      
+      // Bổ sung thêm nút chọn giọng
+      const btnSelectVoice = document.createElement('button');
+      btnSelectVoice.id = 'btn-select-voice';
+      btnSelectVoice.className = 'btn';
+      btnSelectVoice.textContent = '🗣️';
+      btnSelectVoice.title = 'Chọn giọng đọc';
+      btnSelectVoice.addEventListener('click', function() {
+        const selector = document.getElementById('voice-selector-container');
+        if (selector) {
+          selector.style.display = selector.style.display === 'none' ? 'block' : 'none';
+        }
+      });
+      document.querySelector('.controls').appendChild(btnSelectVoice);
       
       // Thời gian hiển thị mỗi slide (tính bằng ms)
       const slideTime = 10000; // 10 giây
@@ -294,6 +531,12 @@
         // Cập nhật hiển thị thời gian
         currentTimeDisplay.textContent = formatTime(currentTime);
         
+        // Dừng audio đang phát
+        if (currentAudio) {
+          currentAudio.pause();
+          currentAudio = null;
+        }
+        
         // Cuộn narrative đến phần tương ứng
         if (narrativeByTime[currentTime]) {
           const narrativeSection = narrativeByTime[currentTime];
@@ -303,6 +546,11 @@
             const narrativeContainer = document.querySelector('.narrative-container');
             const percentScroll = narrativeIndex / narrativeHTML.length;
             narrativeContainer.scrollTop = percentScroll * narrativeContainer.scrollHeight;
+            
+            // Phát TTS phần narrative của slide hiện tại
+            if (isSpeaking) {
+              playTTS(narrativeSection);
+            }
           }
         }
       }
@@ -374,8 +622,35 @@
         speedMultiplier = speeds[(currentSpeedIndex + 1) % speeds.length];
         btnSpeed.textContent = `x${speedMultiplier}`;
         
+        // Cập nhật tốc độ của audio đang phát
+        if (currentAudio) {
+          currentAudio.playbackRate = speedMultiplier;
+        }
+        
         if (isPlaying) {
           startSlideshow(); // Restart với tốc độ mới
+        }
+      }
+      
+      // Bật/tắt giọng đọc
+      function toggleVoice() {
+        if (isAudioLoading) return;
+        
+        isSpeaking = !isSpeaking;
+        btnVoice.textContent = isSpeaking ? '🔊' : '🔇';
+        
+        if (!isSpeaking) {
+          // Dừng audio nếu đang phát
+          if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+          }
+        } else {
+          // Bắt đầu phát audio lại nếu đang hiển thị slide
+          const currentTime = parseInt(slides[currentSlide].getAttribute('data-time'));
+          if (narrativeByTime[currentTime]) {
+            playTTS(narrativeByTime[currentTime]);
+          }
         }
       }
       
@@ -391,10 +666,15 @@
       btnRestart.addEventListener('click', restartSlideshow);
       btnSpeed.addEventListener('click', changeSpeed);
       document.getElementById('btn-next').addEventListener('click', nextSlide);
+      btnVoice.addEventListener('click', toggleVoice);
       
       // Bắt đầu trình chiếu
       btnToggle.classList.add('btn-pause');
       console.log('Slides có sẵn:', slides.length);
+      
+      // Khởi tạo trình chọn giọng đọc
+      createVoiceSelector();
+      
       startSlideshow();
       console.log('Đã bắt đầu trình chiếu');
     });

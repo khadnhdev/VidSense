@@ -55,6 +55,31 @@ app.post('/upload', upload.single('video'), videoController.uploadVideo);
 app.get('/processing/:id', videoController.getProcessingPage);
 app.get('/result/:id', videoController.getResultPage);
 app.get('/api/status/:id', videoController.getVideoStatus);
+app.post('/api/tts', async (req, res) => {
+  try {
+    const { text, voice } = req.body;
+    if (!text) {
+      return res.status(400).json({ error: 'Thiếu văn bản để chuyển đổi' });
+    }
+    
+    // Giới hạn độ dài văn bản để tránh lỗi
+    const truncatedText = text.length > 4096 ? text.substring(0, 4096) : text;
+    
+    const openaiService = require('./services/openaiService');
+    const audioBuffer = await openaiService.textToSpeech(truncatedText, voice);
+    
+    // Gửi audio dưới dạng response
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audioBuffer.length
+    });
+    
+    res.send(audioBuffer);
+  } catch (error) {
+    console.error('Lỗi khi chuyển đổi TTS:', error);
+    res.status(500).json({ error: 'Đã xảy ra lỗi khi chuyển đổi văn bản thành giọng nói' });
+  }
+});
 app.get('/videos', async (req, res) => {
   try {
     const videos = await require('./models/videoModel').getAllVideos();
