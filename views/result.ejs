@@ -16,6 +16,9 @@
       <div class="narrative">
         <%- video.narrative.replace(/\n/g, '<br>') %>
       </div>
+      <div class="buttons" style="margin-top: 20px; text-align: center;">
+        <a href="/slideshow/<%= video._id || video.id %>" class="btn btn-primary">Xem trình chiếu tự động</a>
+      </div>
     </div>
     
     <div class="result-section">

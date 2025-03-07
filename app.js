@@ -4,6 +4,34 @@ const path = require('path');
 const multer = require('multer');
 const { initDb } = require('./database');
 const videoRoutes = require('./routes/videoRoutes');
+const videoController = require('./controllers/videoController');
+
+// Thiết lập multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueId = require('uuid').v4();
+    req.videoId = uniqueId;
+    const extension = path.extname(file.originalname);
+    cb(null, uniqueId + extension);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: {
+    fileSize: 1024 * 1024 * 500 // 500MB
+  },
+  fileFilter: function (req, file, cb) {
+    // Chỉ chấp nhận video
+    if (!file.mimetype.startsWith('video/')) {
+      return cb(new Error('Chỉ được tải lên file video'));
+    }
+    cb(null, true);
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +50,24 @@ initDb();
 
 // Routes
 app.use('/', videoRoutes);
+app.get('/', videoController.getHomePage);
+app.post('/upload', upload.single('video'), videoController.uploadVideo);
+app.get('/processing/:id', videoController.getProcessingPage);
+app.get('/result/:id', videoController.getResultPage);
+app.get('/api/status/:id', videoController.getVideoStatus);
+app.get('/videos', async (req, res) => {
+  try {
+    const videos = await require('./models/videoModel').getAllVideos();
+    res.json(videos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+app.get('/slideshow/:id', videoController.getSlideshowPage);
+app.get('/slideshow/', (req, res) => {
+  res.redirect('/'); // Chuyển hướng về trang chủ
+});
+app.get('/frames/:videoId/:frameTime.jpg', videoController.getFrameImage);
 
 // Khởi động server
 app.listen(PORT, () => {

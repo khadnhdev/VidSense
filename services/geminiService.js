@@ -16,8 +16,15 @@ async function generateNarrative(transcript, frameDescriptions) {
     Mô tả các khung hình:
     ${JSON.stringify(frameDescriptions, null, 2)}
     
-    Dựa trên những thông tin này, hãy viết lại một bản mô tả chi tiết về video từ góc nhìn người kể chuyện, theo dòng thời gian.
-    Hãy kết hợp cả thông tin từ bản ghi âm và mô tả hình ảnh để tạo ra một bản tường thuật mạch lạc và chi tiết.
+    Dựa trên những thông tin này, hãy tạo một bản tường thuật như thể bạn đang kể một câu chuyện cho người nghe. Hãy tưởng tượng mỗi khung hình là một phần minh họa trong câu chuyện của bạn.
+    
+    Hướng dẫn cụ thể:
+    1. Kể câu chuyện với phong cách hấp dẫn, dưới góc nhìn người thứ ba
+    2. Đặt tên cho các nhân vật xuất hiện (nếu họ không được đề cập tên trong bản ghi âm)
+    3. Phân chia câu chuyện thành các đoạn tương ứng với các khung hình chính
+    4. Kết hợp những gì nhân vật nói (từ transcript) và những gì nhìn thấy (từ mô tả khung hình)
+    5. Tạo một cốt truyện mạch lạc liên kết tất cả các khung hình
+    6. Độ dài bản tường thuật phải tương ứng với độ dài của video, đảm bảo có đủ nội dung để đọc trong khi trình chiếu tất cả các khung hình
     `;
     
     const result = await model.generateContent(promptText);

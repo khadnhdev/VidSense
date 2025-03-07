@@ -1,6 +1,6 @@
 const { db } = require('../database');
 
-exports.saveVideo = (id, title, filename) => {
+function saveVideo(id, title, filename) {
   return new Promise((resolve, reject) => {
     db.run(
       'INSERT INTO videos (id, title, filename) VALUES (?, ?, ?)',
@@ -11,18 +11,18 @@ exports.saveVideo = (id, title, filename) => {
       }
     );
   });
-};
+}
 
-exports.getVideoById = (id) => {
+function getVideoById(id) {
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM videos WHERE id = ?', [id], (err, row) => {
       if (err) return reject(err);
       resolve(row);
     });
   });
-};
+}
 
-exports.updateVideoStatus = (id, status) => {
+function updateVideoStatus(id, status) {
   return new Promise((resolve, reject) => {
     db.run(
       'UPDATE videos SET status = ? WHERE id = ?',
@@ -33,9 +33,9 @@ exports.updateVideoStatus = (id, status) => {
       }
     );
   });
-};
+}
 
-exports.updateVideoTranscript = (id, transcript) => {
+function updateVideoTranscript(id, transcript) {
   return new Promise((resolve, reject) => {
     db.run(
       'UPDATE videos SET transcript = ? WHERE id = ?',
@@ -46,9 +46,9 @@ exports.updateVideoTranscript = (id, transcript) => {
       }
     );
   });
-};
+}
 
-exports.updateVideoFrameDescriptions = (id, descriptions) => {
+function updateVideoFrameDescriptions(id, descriptions) {
   return new Promise((resolve, reject) => {
     db.run(
       'UPDATE videos SET frame_descriptions = ? WHERE id = ?',
@@ -59,9 +59,9 @@ exports.updateVideoFrameDescriptions = (id, descriptions) => {
       }
     );
   });
-};
+}
 
-exports.updateVideoNarrative = (id, narrative) => {
+function updateVideoNarrative(id, narrative) {
   return new Promise((resolve, reject) => {
     db.run(
       'UPDATE videos SET narrative = ?, status = "completed" WHERE id = ?',
@@ -72,4 +72,18 @@ exports.updateVideoNarrative = (id, narrative) => {
       }
     );
   });
+}
+
+async function getAllVideos() {
+  return await db.all('SELECT * FROM videos ORDER BY created_at DESC');
+}
+
+module.exports = {
+  saveVideo,
+  getVideoById,
+  updateVideoStatus,
+  updateVideoTranscript,
+  updateVideoFrameDescriptions,
+  updateVideoNarrative,
+  getAllVideos
 }; 

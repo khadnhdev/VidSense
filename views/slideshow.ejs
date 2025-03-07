@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trình chiếu - <%= video.title %></title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    
+    .container {
+      width: 90%;
+      max-width: 1200px;
+      margin: 2rem auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    h1, h2 {
+      color: #fff;
+      text-align: center;
+    }
+    
+    .slideshow-container {
+      width: 100%;
+      position: relative;
+      margin: 2rem 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    
+    .slide {
+      display: none;
+      width: 100%;
+      text-align: center;
+    }
+    
+    .slide.active {
+      display: block;
+    }
+    
+    .slide img {
+      max-width: 100%;
+      max-height: 70vh;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      border: 2px solid #333;
+    }
+    
+    .slide-timestamp {
+      font-size: 1.2rem;
+      margin: 1rem 0;
+      color: #ccc;
+    }
+    
+    .narrative-container {
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-top: 2rem;
+      max-height: 250px;
+      overflow-y: auto;
+      width: 90%;
+      line-height: 1.6;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      background-color: #333;
+      height: 10px;
+      margin-top: 1rem;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    
+    .progress {
+      height: 100%;
+      background-color: #4CAF50;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+    
+    .controls {
+      margin-top: 1.5rem;
+      display: flex;
+      gap: 1rem;
+    }
+    
+    .btn {
+      padding: 0.5rem 1rem;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.3s;
+    }
+    
+    .btn:hover {
+      background-color: #45a049;
+    }
+    
+    .btn-pause {
+      background-color: #f44336;
+    }
+    
+    .btn-pause:hover {
+      background-color: #d32f2f;
+    }
+    
+    .time-display {
+      margin-top: 1rem;
+      font-size: 1.2rem;
+      color: #ccc;
+    }
+    
+    .back-link {
+      margin-top: 2rem;
+      color: #4CAF50;
+      text-decoration: none;
+    }
+    
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Trình chiếu: <%= video.title %></h1>
+    
+    <div class="slideshow-container">
+      <% 
+        let descriptions;
+        try {
+          descriptions = JSON.parse(video.frame_descriptions);
+        } catch(e) {
+          descriptions = [];
+        }
+        
+        descriptions.sort((a, b) => a.time - b.time);
+        console.log('Số lượng khung hình:', descriptions.length);
+      %>
+      
+      <!-- Check slides -->
+      <% if (descriptions.length === 0) { %>
+        <div class="no-slides">Không có khung hình nào để hiển thị.</div>
+      <% } %>
+      
+      <% descriptions.forEach((frame, index) => { %>
+        <div class="slide <%= index === 0 ? 'active' : '' %>" data-time="<%= frame.time %>">
+          <img src="/frames/<%= videoId %>/<%= frame.time %>.jpg" 
+               alt="Frame at <%= formatTime(frame.time) %>"
+               onerror="this.onerror=null; console.error('Lỗi: Không thể tải hình ảnh tại', this.src); this.src='/images/error.png';">
+          <div class="slide-timestamp">Thời điểm: <%= formatTime(frame.time) %></div>
+        </div>
+      <% }); %>
+      
+      <div class="progress-bar">
+        <div class="progress" id="progress"></div>
+      </div>
+      
+      <div class="time-display">
+        <span id="current-time">00:00</span> / 
+        <span id="total-time"><%= formatTime(descriptions.length > 0 ? descriptions[descriptions.length-1].time : 0) %></span>
+      </div>
+      
+      <div class="controls">
+        <button class="btn" id="btn-restart">Bắt đầu lại</button>
+        <button class="btn" id="btn-toggle">Tạm dừng</button>
+        <button class="btn" id="btn-speed">x1</button>
+        <button class="btn" id="btn-next">Next →</button>
+      </div>
+    </div>
+    
+    <div class="narrative-container">
+      <div id="narrative-text">
+        <%- video.narrative.replace(/\n/g, '<br>') %>
+      </div>
+    </div>
+    
+    <a href="/result/<%= videoId %>" class="back-link">← Quay lại trang kết quả</a>
+  </div>
+  
+  <script>
+    // Kiểm tra trạng thái trang
+    window.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        console.log('Trang không hiển thị, tạm dừng slideshow');
+        stopSlideshow();
+      } else {
+        console.log('Trang được hiển thị lại');
+      }
+    });
+    
+    document.addEventListener('DOMContentLoaded', function() {
+      const slides = document.querySelectorAll('.slide');
+      const progressBar = document.getElementById('progress');
+      const currentTimeDisplay = document.getElementById('current-time');
+      const totalTimeDisplay = document.getElementById('total-time');
+      const narrativeText = document.getElementById('narrative-text');
+      const btnToggle = document.getElementById('btn-toggle');
+      const btnRestart = document.getElementById('btn-restart');
+      const btnSpeed = document.getElementById('btn-speed');
+      
+      // Debug: Kiểm tra các phần tử
+      console.log('Debug slideshow:');
+      console.log('- slides:', slides.length);
+      console.log('- progressBar:', progressBar ? 'OK' : 'Không tìm thấy');
+      console.log('- narrativeText:', narrativeText ? 'OK' : 'Không tìm thấy');
+      console.log('- Buttons:', btnToggle ? 'OK' : 'Không tìm thấy');
+      
+      let currentSlide = 0;
+      let isPlaying = true;
+      let speedMultiplier = 1;
+      let slideInterval;
+      
+      // Thời gian hiển thị mỗi slide (tính bằng ms)
+      const slideTime = 10000; // 10 giây
+      
+      // Kiểm tra nếu không có slides nào
+      if (slides.length === 0) {
+        console.error('Không có slides nào được tìm thấy!');
+        return; // Thoát khỏi script
+      }
+      
+      // Lấy thời gian của slide cuối cùng
+      const lastSlideTime = slides.length > 0 ? 
+        parseInt(slides[slides.length - 1].getAttribute('data-time')) : 0;
+      
+      // Tạo các thời điểm (timestamps) từ narrative
+      const narrativeHTML = narrativeText ? narrativeText.innerHTML : '';
+      const narrativeByTime = {};
+      
+      <% 
+        // Tính toán narrativeByTime trong JavaScript phía server
+         const narrativeSegments = {};
+         const totalParts = descriptions.length;
+         
+         // Phần này sẽ được tính lại ở phía client sau khi có narrativeHTML
+         // Server chỉ tính phần tỷ lệ
+         descriptions.forEach((frame, index) => {
+           narrativeSegments[frame.time] = {
+             position: index / totalParts // Vị trí tương đối (0-1)
+           };
+         });
+      %>
+      
+      // Tính toán và phân đoạn nội dung narrative
+      console.log('- totalParts:', <%= descriptions.length %>);
+      console.log('- narrativeHTML length:', narrativeHTML.length);
+      
+      // Tính toán các đoạn từ vị trí tương đối (cách mới, tránh khai báo lại biến)
+      (function() {
+        let pos, start, end;
+        <% Object.keys(narrativeSegments).forEach(time => { %>
+          pos = <%= narrativeSegments[time].position %>;
+          start = Math.floor(narrativeHTML.length * pos);
+          end = Math.floor(narrativeHTML.length * (pos + 1/<%= totalParts %>));
+          narrativeByTime[<%= time %>] = narrativeHTML.substring(start, end);
+        <% }); %>
+      })();
+      
+      // Debug: Kiểm tra narrativeByTime
+      console.log('- narrativeByTime keys:', Object.keys(narrativeByTime));
+      
+      function showSlide(index) {
+        console.log('Hiển thị slide tại index:', index);
+      
+        // Ẩn tất cả slide
+        slides.forEach(slide => slide.classList.remove('active'));
+        
+        // Hiển thị slide hiện tại
+        slides[index].classList.add('active');
+        
+        // Cập nhật thanh tiến trình
+        const currentTime = parseInt(slides[index].getAttribute('data-time'));
+        const progress = (currentTime / lastSlideTime) * 100;
+        progressBar.style.width = `${progress}%`;
+        console.log('  - currentTime:', currentTime, 'progress:', progress + '%');
+        
+        // Cập nhật hiển thị thời gian
+        currentTimeDisplay.textContent = formatTime(currentTime);
+        
+        // Cuộn narrative đến phần tương ứng
+        if (narrativeByTime[currentTime]) {
+          const narrativeSection = narrativeByTime[currentTime];
+          // Tìm vị trí của đoạn này trong HTML và cuộn đến đó
+          const narrativeIndex = narrativeHTML.indexOf(narrativeSection);
+          if (narrativeIndex >= 0) {
+            const narrativeContainer = document.querySelector('.narrative-container');
+            const percentScroll = narrativeIndex / narrativeHTML.length;
+            narrativeContainer.scrollTop = percentScroll * narrativeContainer.scrollHeight;
+          }
+        }
+      }
+      
+      function nextSlide() {
+        if (currentSlide < slides.length - 1) {
+          currentSlide++;
+          showSlide(currentSlide);
+        } else {
+          stopSlideshow();
+        }
+      }
+      
+      function startSlideshow() {
+        console.log('startSlideshow called, isPlaying =', isPlaying);
+        if (isPlaying) {
+          showSlide(currentSlide);
+          // Hủy bỏ bộ hẹn giờ cũ nếu có
+          if (slideInterval) {
+            clearTimeout(slideInterval);
+          }
+          
+          // Thiết lập bộ hẹn giờ mới
+          console.log('Đặt hẹn giờ, nextSlide sau', slideTime / speedMultiplier, 'ms');
+          slideInterval = setTimeout(() => {
+            nextSlide();
+            // Chỉ tự động tiếp tục nếu vẫn đang ở chế độ phát
+            if (isPlaying) {
+              startSlideshow();
+            }
+          }, slideTime / speedMultiplier);
+        }
+      }
+      
+      function stopSlideshow() {
+        if (slideInterval) {
+          clearTimeout(slideInterval);
+          slideInterval = null;
+        }
+        isPlaying = false;
+        btnToggle.textContent = "Tiếp tục";
+        btnToggle.classList.remove('btn-pause');
+      }
+      
+      function toggleSlideshow() {
+        if (isPlaying) {
+          stopSlideshow();
+        } else {
+          isPlaying = true;
+          btnToggle.textContent = "Tạm dừng";
+          btnToggle.classList.add('btn-pause');
+          startSlideshow();
+        }
+        // Phương pháp dự phòng - click vào nút để test chuyển slide một cách thủ công
+        console.log('Đang ở slide:', currentSlide, '/', slides.length - 1);
+      }
+      
+      function restartSlideshow() {
+        currentSlide = 0;
+        isPlaying = true;
+        btnToggle.textContent = "Tạm dừng";
+        btnToggle.classList.add('btn-pause');
+        startSlideshow();
+      }
+      
+      function changeSpeed() {
+        const speeds = [1, 1.5, 2, 3];
+        const currentSpeedIndex = speeds.indexOf(speedMultiplier);
+        speedMultiplier = speeds[(currentSpeedIndex + 1) % speeds.length];
+        btnSpeed.textContent = `x${speedMultiplier}`;
+        
+        if (isPlaying) {
+          startSlideshow(); // Restart với tốc độ mới
+        }
+      }
+      
+      // Format thời gian từ giây sang MM:SS
+      function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      // Gắn sự kiện cho các nút
+      btnToggle.addEventListener('click', toggleSlideshow);
+      btnRestart.addEventListener('click', restartSlideshow);
+      btnSpeed.addEventListener('click', changeSpeed);
+      document.getElementById('btn-next').addEventListener('click', nextSlide);
+      
+      // Bắt đầu trình chiếu
+      btnToggle.classList.add('btn-pause');
+      console.log('Slides có sẵn:', slides.length);
+      startSlideshow();
+      console.log('Đã bắt đầu trình chiếu');
+    });
+  </script>
+</body>
+</html> 
