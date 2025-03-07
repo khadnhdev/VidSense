@@ -46,7 +46,7 @@ async function processVideo(videoId, videoPath) {
     console.log(`\n[Video ${videoId}] Bước 3: Đang mô tả các khung hình...`);
     
     // Bước 3: Mô tả các khung hình
-    const frameDescriptions = await describeFrames(framesDir, frameFiles);
+    const frameDescriptions = await describeFrames(framesDir, frameFiles, transcript);
     await videoModel.updateVideoFrameDescriptions(videoId, frameDescriptions);
     console.log(`[Video ${videoId}] ✓ Đã mô tả ${frameDescriptions.length} khung hình`);
     
@@ -168,24 +168,36 @@ async function extractFrames(videoPath, outputDir, duration) {
   }
 }
 
-async function describeFrames(framesDir, frameFiles) {
+async function describeFrames(framesDir, frameFiles, transcript) {
   console.log(`[Descriptions] Bắt đầu mô tả ${frameFiles.length} khung hình...`);
   console.log(`[Descriptions] Danh sách file:`, frameFiles);
   
   const descriptions = [];
+  const previousDescriptions = [];
   
   for (const file of frameFiles) {
     const filePath = path.join(framesDir, file);
     const timeMatch = file.match(/frame_(\d+)\.jpg/);
     const timeInSeconds = timeMatch ? parseInt(timeMatch[1]) : 0;
     
+    // Tìm lời nói liên quan đến thời điểm hiện tại
+    const relevantTranscript = getRelevantTranscript(transcript, timeInSeconds);
+    
     console.log(`[Descriptions] Đang mô tả khung hình tại ${timeInSeconds}s...`);
     try {
-      const description = await openaiService.describeImage(filePath);
-      descriptions.push({
+      const description = await openaiService.describeImage(filePath, {
+        timeInSeconds,
+        relevantTranscript,
+        previousDescriptions: [...previousDescriptions]
+      });
+      
+      const descriptionObj = {
         time: timeInSeconds,
         description
-      });
+      };
+      
+      descriptions.push(descriptionObj);
+      previousDescriptions.push(descriptionObj);
     } catch (error) {
       console.error(`[Descriptions] Lỗi khi mô tả khung hình ${file}:`, error);
     }
@@ -196,6 +208,27 @@ async function describeFrames(framesDir, frameFiles) {
   console.log(`[Descriptions] ✓ Đã mô tả xong ${descriptions.length} khung hình`);
   
   return descriptions;
+}
+
+// Hàm trích xuất lời nói liên quan đến thời điểm hiện tại
+function getRelevantTranscript(transcript, currentTime) {
+  try {
+    const parsedTranscript = typeof transcript === 'string' ? JSON.parse(transcript) : transcript;
+    
+    if (!parsedTranscript || !parsedTranscript.segments) {
+      return null;
+    }
+    
+    // Tìm các đoạn lời nói trong khoảng thời gian gần thời điểm hiện tại (trước/sau 10 giây)
+    const relevantSegments = parsedTranscript.segments.filter(segment => {
+      return (segment.start <= currentTime + 10 && segment.end >= currentTime - 10);
+    });
+    
+    return relevantSegments.map(s => s.text).join(' ');
+  } catch (error) {
+    console.error('[Transcript] Lỗi khi phân tích transcript:', error);
+    return null;
+  }
 }
 
 async function cleanup(framesDir) {
