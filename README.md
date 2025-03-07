@@ -14,8 +14,8 @@
 
 1. Clone repository:
    ```
-   git clone https://github.com/your-username/video-slideshow-creator.git
-   cd video-slideshow-creator
+   git clone https://github.com/khadnhdev/VidSense.git
+   cd VidSense
    ```
 
 2. Cài đặt các gói phụ thuộc:
