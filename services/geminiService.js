@@ -25,6 +25,10 @@ async function generateNarrative(transcript, frameDescriptions) {
     4. Kết hợp những gì nhân vật nói (từ transcript) và những gì nhìn thấy (từ mô tả khung hình)
     5. Tạo một cốt truyện mạch lạc liên kết tất cả các khung hình
     6. Độ dài bản tường thuật phải tương ứng với độ dài của video, đảm bảo có đủ nội dung để đọc trong khi trình chiếu tất cả các khung hình
+    7. Bản tường thuật cần ngắn gọn, mang tính tóm tắt
+    8. KHÔNG dẫn lại lời thoại trực tiếp, chỉ sử dụng lời thoại để hiểu ngữ cảnh và tóm tắt ý chính
+    9. Tập trung vào hành động và diễn biến quan trọng, bỏ qua chi tiết không cần thiết
+    10. Giọng điệu tường thuật cần sinh động nhưng súc tích
     `;
     
     const result = await model.generateContent(promptText);
