@@ -48,6 +48,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Khởi tạo database
 initDb();
 
+// Log tất cả các request để debug
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Routes
 app.use('/', videoRoutes);
 app.get('/', videoController.getHomePage);
@@ -93,6 +99,8 @@ app.get('/slideshow/', (req, res) => {
   res.redirect('/'); // Chuyển hướng về trang chủ
 });
 app.get('/frames/:videoId/:frameTime.jpg', videoController.getFrameImage);
+app.get('/api/audio/:videoId/list', videoController.listAudioFiles);
+app.get('/audio/:videoId/:timePoint.mp3', videoController.getAudioSegment);
 
 // Khởi động server
 app.listen(PORT, () => {

@@ -2,18 +2,35 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
 const ffprobePath = require('ffprobe-static').path;
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const { mkdir, unlink } = require('fs').promises;
 const whisperService = require('./whisperService');
 const openaiService = require('./openaiService');
 const geminiService = require('./geminiService');
 const videoModel = require('../models/videoModel');
+const { exec } = require('child_process');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
 console.log('FFmpeg path:', ffmpegPath);
 console.log('FFprobe path:', ffprobePath);
+
+// Đường dẫn thư mục uploads
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+// Đường dẫn thư mục audio
+const audioDir = path.join(__dirname, '..', 'public', 'audio');
+
+// Đảm bảo thư mục uploads tồn tại
+if (!fs.existsSync(uploadsDir)) {
+  fsPromises.mkdir(uploadsDir, { recursive: true });
+}
+
+// Đảm bảo thư mục audio tồn tại
+if (!fs.existsSync(audioDir)) {
+  fs.mkdirSync(audioDir, { recursive: true });
+}
 
 async function processVideo(videoId, videoPath) {
   try {
@@ -59,6 +76,40 @@ async function processVideo(videoId, videoPath) {
     await videoModel.updateVideoNarrative(videoId, narrative);
     console.log(`[Video ${videoId}] ✓ Đã tạo bản tường thuật thành công`);
     
+    // Tạo thư mục audio cho video này
+    const videoAudioDir = path.join(audioDir, videoId);
+    if (!fs.existsSync(videoAudioDir)) {
+      try {
+        fs.mkdirSync(videoAudioDir, { recursive: true });
+        console.log(`[VideoProcessing] ✓ Đã tạo thư mục audio: ${videoAudioDir}`);
+      } catch (err) {
+        console.error(`[VideoProcessing] ❌ Lỗi khi tạo thư mục audio:`, err);
+      }
+    }
+    
+    console.log("[VideoProcessing] Bắt đầu tạo audio cho từng đoạn tường thuật...");
+    
+    // Chia và tạo audio cho từng đoạn tường thuật theo thời điểm
+    const narrativeSegments = splitNarrativeForFrames(narrative, frameDescriptions);
+    
+    // Tạo audio cho từng phần
+    for (const timePoint in narrativeSegments) {
+      const text = narrativeSegments[timePoint];
+      if (text && text.trim()) {
+        try {
+          console.log(`[VideoProcessing] Đang tạo audio cho thời điểm ${timePoint}s...`);
+          const audioBuffer = await openaiService.textToSpeech(text, 'nova');
+          const audioFilePath = path.join(videoAudioDir, `${timePoint}.mp3`);
+          await fsPromises.writeFile(audioFilePath, audioBuffer);
+          console.log(`[VideoProcessing] ✓ Đã tạo audio cho thời điểm ${timePoint}s`);
+        } catch (error) {
+          console.error(`[VideoProcessing] ❌ Lỗi khi tạo audio cho thời điểm ${timePoint}s:`, error);
+        }
+      }
+    }
+    
+    console.log("[VideoProcessing] ✓ Hoàn thành việc tạo audio cho các đoạn tường thuật");
+    
     // Dọn dẹp
     await cleanup(framesDir);
     console.log(`\n[Video ${videoId}] ✓ Hoàn tất xử lý video`);
@@ -103,7 +154,7 @@ async function extractFrames(videoPath, outputDir, duration) {
     });
     
     // Đổi tên từ thumbnail-X thành frame_Y
-    const files = await fs.readdir(outputDir);
+    const files = await fsPromises.readdir(outputDir);
     const thumbnailFiles = files.filter(file => file.startsWith('thumbnail-') && file.endsWith('.jpg'));
     console.log('[Frames] Files được tạo:', thumbnailFiles.length);
     console.log('[Frames] Danh sách files:', thumbnailFiles);
@@ -116,7 +167,7 @@ async function extractFrames(videoPath, outputDir, duration) {
         const index = parseInt(match[1]) - 1;
         const timeInSeconds = index * frameInterval;
         const newName = `frame_${timeInSeconds}.jpg`;
-        await fs.rename(
+        await fsPromises.rename(
           path.join(outputDir, file),
           path.join(outputDir, newName)
         );
@@ -125,7 +176,7 @@ async function extractFrames(videoPath, outputDir, duration) {
     }
     
     // Kiểm tra lại sau khi đổi tên
-    const renamedFiles = await fs.readdir(outputDir);
+    const renamedFiles = await fsPromises.readdir(outputDir);
     console.log('[Frames] Files sau khi đổi tên:', renamedFiles);
     console.log(`[Frames] ✓ Đã trích xuất xong ${frameFiles.length}/${frameCount + 1} khung hình`);
     
@@ -233,15 +284,40 @@ function getRelevantTranscript(transcript, currentTime) {
 
 async function cleanup(framesDir) {
   try {
-    const files = await fs.readdir(framesDir);
+    const files = await fsPromises.readdir(framesDir);
     for (const file of files) {
       await unlink(path.join(framesDir, file));
     }
-    await fs.rmdir(framesDir);
+    await fsPromises.rmdir(framesDir);
     console.log(`Đã dọn dẹp thư mục ${framesDir}`);
   } catch (error) {
     console.error('Lỗi khi dọn dẹp:', error);
   }
+}
+
+// Hàm chia tường thuật thành các đoạn theo thời điểm của khung hình
+function splitNarrativeForFrames(narrative, frameDescriptions) {
+  const narrativeSegments = {};
+  
+  // Chia tường thuật thành các đoạn
+  const paragraphs = narrative.split('\n\n').filter(p => p.trim() !== '');
+  
+  // Xử lý trường hợp số đoạn khác với số khung hình
+  if (paragraphs.length !== frameDescriptions.length) {
+    console.log(`[VideoProcessing] Cảnh báo: Số đoạn tường thuật (${paragraphs.length}) khác với số khung hình (${frameDescriptions.length})`);
+    
+    // Nếu ít đoạn hơn, sẽ lặp lại đoạn cuối
+    // Nếu nhiều đoạn hơn, sẽ bỏ qua các đoạn thừa
+  }
+  
+  // Gán mỗi đoạn cho một thời điểm
+  frameDescriptions.forEach((frame, index) => {
+    const timePoint = frame.time;
+    const paragraph = index < paragraphs.length ? paragraphs[index] : paragraphs[paragraphs.length - 1];
+    narrativeSegments[timePoint] = paragraph;
+  });
+  
+  return narrativeSegments;
 }
 
 module.exports = {

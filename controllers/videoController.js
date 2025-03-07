@@ -205,4 +205,53 @@ async function prepareFrameDirectory(videoId, video) {
     console.error(`[Slideshow] Lỗi khi chuẩn bị frames:`, error);
     throw error;
   }
+}
+
+// Xử lý yêu cầu file audio segment
+exports.getAudioSegment = async function(req, res) {
+  try {
+    const { videoId, timePoint } = req.params;
+    const audioPath = path.join(__dirname, '..', 'public', 'audio', videoId, `${timePoint}.mp3`);
+    
+    console.log(`[AudioSegment] Yêu cầu file audio: ${audioPath}`);
+    console.log(`[AudioSegment] File tồn tại: ${fsSync.existsSync(audioPath)}`);
+    
+    if (!fsSync.existsSync(audioPath)) {
+      return res.status(404).send('Không tìm thấy file audio');
+    }
+    
+    // Kiểm tra nội dung thư mục để debug
+    const audioDir = path.join(__dirname, '..', 'public', 'audio', videoId);
+    if (fsSync.existsSync(audioDir)) {
+      console.log(`[AudioSegment] Nội dung thư mục: ${fsSync.readdirSync(audioDir)}`);
+    }
+    
+    res.sendFile(audioPath);
+  } catch (error) {
+    console.error('Lỗi khi phục vụ file audio:', error);
+    res.status(500).send('Lỗi server');
+  }
+}
+
+// Xử lý yêu cầu liệt kê file audio
+exports.listAudioFiles = async function(req, res) {
+  try {
+    console.log(`[listAudioFiles] Được gọi với videoId: ${req.params.videoId}`);
+    const { videoId } = req.params;
+    const audioDir = path.join(__dirname, '..', 'public', 'audio', videoId);
+    
+    console.log(`[listAudioFiles] Thư mục audio: ${audioDir}`);
+    console.log(`[listAudioFiles] Thư mục tồn tại: ${fsSync.existsSync(audioDir)}`);
+    
+    if (!fsSync.existsSync(audioDir)) {
+      return res.json({ exists: false, files: [] });
+    }
+    
+    const files = fsSync.readdirSync(audioDir);
+    console.log(`[listAudioFiles] Files trong thư mục: ${files.length}`);
+    return res.json({ exists: true, files: files });
+  } catch (error) {
+    console.error('Lỗi khi liệt kê file audio:', error);
+    res.status(500).json({ error: 'Lỗi server' });
+  }
 } 
